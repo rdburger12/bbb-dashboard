@@ -15,6 +15,7 @@ from .metrics import (
     add_value_vs_unit_avg,
 )
 from .charts import unit_bar_chart
+from .team_metadata import load_team_metadata
 import pandas as pd
 import numpy as np
 
@@ -47,11 +48,29 @@ def run_app():
     m = add_unit_averages(m, value_col="expected_points")
     m = add_value_vs_unit_avg(m, value_col="expected_points")
 
+        # --- Team colors (nflverse) ---
+    team_meta = load_team_metadata()
+
+    # IMPORTANT: adjust join key if needed
+    # Assumes your `team` column matches nflverse `team_abbr`
+    m = m.merge(
+        team_meta,
+        left_on="team",
+        right_on="team_abbr",
+        how="left",
+    )
+
+
     # --- Chart controls + chart ---
     st.subheader("Team ranking within a position group")
 
-    units = sorted(m["unit"].unique().tolist())
-    selected_unit = st.selectbox("Position group", units)
+    unit_order = ["QB", "RB", "WR", "TE", "K", "OTH"]
+
+    # keep only units that actually exist in the data (defensive)
+    units = [u for u in unit_order if u in set(m["unit"].unique())]
+
+    selected_unit = st.selectbox("Position", units)
+
 
     metric_label_map = {
         "Expected points": "expected_points",

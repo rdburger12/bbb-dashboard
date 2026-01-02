@@ -1,28 +1,38 @@
-import plotly.express as px
 import pandas as pd
+import plotly.graph_objects as go
 
 
 def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
-    """
-    Vertical bar chart ranking teams within a unit by a selected metric,
-    with a dotted reference line at the unit average.
-    """
-    plot_df = df.sort_values(metric, ascending=False)
+    plot_df = df.sort_values(metric, ascending=False).copy()
+
+    # Defensive defaults in case any team colors are missing
+    plot_df["team_color"] = plot_df["team_color"].fillna("#888888")
+    plot_df["team_color2"] = plot_df["team_color2"].fillna("#222222")
 
     avg_value = plot_df[metric].mean()
 
-    fig = px.bar(
-        plot_df,
-        x="team",
-        y=metric,
-        hover_data={
-            "team": True,
-            "unit": True,
-            "reg_ppg": True,
-            "expected_games": True,
-            "expected_points": True,
-        },
-        title=f"Teams ranked by {metric_label}",
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=plot_df["team"],
+                y=plot_df[metric],
+                marker=dict(
+                    color=plot_df["team_color"].tolist(),
+                    line=dict(
+                        color=plot_df["team_color2"].tolist(),
+                        width=2,
+                    ),
+                ),
+                hovertemplate=(
+                    "<b>%{x}</b><br>"
+                    f"{metric_label}: %{{y}}<br>"
+                    "PPG: %{customdata[0]}<br>"
+                    "Exp Games: %{customdata[1]}<br>"
+                    "Exp Pts: %{customdata[2]}<extra></extra>"
+                ),
+                customdata=plot_df[["reg_ppg", "expected_games", "expected_points"]].values,
+            )
+        ]
     )
 
     # Average reference line
@@ -33,14 +43,17 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
         opacity=0.6,
         annotation_text=f"Avg: {avg_value:.2f}",
         annotation_position="top right",
+        annotation_xanchor="right",
     )
 
     fig.update_layout(
+        title=f"Teams ranked by {metric_label}",
         xaxis_title="Team",
         yaxis_title=metric_label,
         height=650,
         margin=dict(l=10, r=10, t=60, b=80),
         xaxis_tickangle=-45,
+        showlegend=False,
     )
 
     return fig
