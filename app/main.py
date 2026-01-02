@@ -16,91 +16,48 @@ from .metrics import (
 )
 from .charts import unit_bar_chart
 import pandas as pd
-
+import numpy as np
 
 
 
 def run_app():
     st.title("Fantasy Football Dashboard")
 
+    # --- Load + prepare data (no display) ---
     pts_df, odds_df = load_raw_data()
 
-    st.subheader("Schema validation")
-
+    # Optional: keep validation but do not display unless failing
     pts_missing = validate_schema(pts_df, REQUIRED_PTS_COLS)
     odds_missing = validate_schema(odds_df, REQUIRED_ODDS_COLS)
-
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.markdown("**pts_2025.csv**")
+    if pts_missing or odds_missing:
+        st.error("Schema validation failed.")
         if pts_missing:
-            st.error(f"Missing required columns: {pts_missing}")
-        else:
-            st.success("Schema OK")
-        st.write(f"Rows: {len(pts_df)} | Cols: {len(pts_df.columns)}")
-        st.write(pts_df.head())
-
-    with c2:
-        st.markdown("**playoff_odds.csv**")
+            st.write(f"pts_2025.csv missing: {pts_missing}")
         if odds_missing:
-            st.error(f"Missing required columns: {odds_missing}")
-        else:
-            st.success("Schema OK")
-        st.write(f"Rows: {len(odds_df)} | Cols: {len(odds_df.columns)}")
-        st.write(odds_df.head())
-
-    st.subheader("Canonicalized preview (naming standardized)")
+            st.write(f"playoff_odds.csv missing: {odds_missing}")
+        st.stop()
 
     pts_c = canonicalize_pts(pts_df)
     odds_c = canonicalize_odds(odds_df)
 
-    c3, c4 = st.columns(2)
-    with c3:
-        st.markdown("**pts (canonical)**")
-        st.write(pts_c.head())
-
-    with c4:
-        st.markdown("**odds (canonical)**")
-        st.write(odds_c.head())
-
-    st.subheader("Join diagnostics (restricted to playoff-odds teams)")
-
     merged = join_pts_with_odds(pts_c, odds_c)
-
-    st.subheader("Metric preview (expected games / expected points / value vs unit avg)")
 
     m = add_expected_games(merged)
     m = add_expected_points(m, base_col="reg_ppg")
     m = add_unit_averages(m, value_col="expected_points")
     m = add_value_vs_unit_avg(m, value_col="expected_points")
 
-    preview_cols = [
-        "team", "unit", "reg_ppg",
-        "expected_games", "expected_points",
-        "unit_avg_expected_points",
-        "value_vs_unit_avg_expected_points",
-    ]
-    st.write(m[preview_cols])
-
-
-    st.subheader("Chart: team ranking within a position group")
+    # --- Chart controls + chart ---
+    st.subheader("Team ranking within a position group")
 
     units = sorted(m["unit"].unique().tolist())
     selected_unit = st.selectbox("Position group", units)
 
     metric_label_map = {
-            "Expected points": "expected_points",
-            "PPG": "reg_ppg",
+        "Expected points": "expected_points",
+        "PPG": "reg_ppg",
     }
-     
-
-    metric_label = st.selectbox(
-        "Metric",
-        list(metric_label_map.keys()),
-        index=0,
-    )
-
+    metric_label = st.selectbox("Metric", list(metric_label_map.keys()), index=0)
     metric = metric_label_map[metric_label]
 
     chart_df = m[m["unit"] == selected_unit].copy()
@@ -110,52 +67,43 @@ def run_app():
         metric=metric,
         metric_label=metric_label,
     )
-
     st.plotly_chart(fig, width="stretch")
 
-    # ---------------------------
-    # Ranked table (overall)
-    # ---------------------------
+    # --- Ranked table (overall) ---
     st.subheader("Ranked table")
 
     table = m.copy()
-
     table["unit_label"] = table["team"].astype(str) + " " + table["unit"].astype(str)
 
-    # Overall rank across ALL units, based on Exp Pts vs Pos Avg
     table["overall_rank"] = (
         table["value_vs_unit_avg_expected_points"]
         .rank(method="min", ascending=False)
         .astype(int)
     )
 
-    # Position rank within unit, based on Expected Points
     table["position_rank"] = (
         table.groupby("unit")["expected_points"]
         .rank(method="min", ascending=False)
         .astype(int)
     )
 
-    # PPG rank within unit, based on reg_ppg
     table["ppg_rank"] = (
         table.groupby("unit")["reg_ppg"]
         .rank(method="min", ascending=False)
         .astype(int)
     )
 
-    # Sort table by overall rank (best first)
     table = table.sort_values(["overall_rank", "unit", "team"]).reset_index(drop=True)
 
-    # Final display with friendly column names
     table_display = table[
         [
             "overall_rank",
-            "unit_label",                          # Team + Position (your “Unit”)
-            "value_vs_unit_avg_expected_points",   # Exp Pts vs Pos Avg
-            "expected_points",                     # Exp Pts
+            "unit_label",
+            "value_vs_unit_avg_expected_points",
+            "expected_points",
             "position_rank",
             "ppg_rank",
-            "reg_ppg",                             # PPG
+            "reg_ppg",
         ]
     ].rename(columns={
         "overall_rank": "Overall Rank",
@@ -167,25 +115,77 @@ def run_app():
         "reg_ppg": "PPG",
     })
 
+    st.dataframe(table_display, width="stretch", hide_index=True)
 
-    st.dataframe(table_display, width="stretch")
+
+    # ---------------------------
+    # Playoff game distribution (team-level)
+    # ---------------------------
+    st.subheader("Playoff game distribution (team-level)")
+
+    team = odds_c.copy()
+
+    # Coerce probabilities to floats; treat missing as 0 for POC
+    for c in ["Win WC", "Win Div", "Win Conf"]:
+        team[c] = pd.to_numeric(team[c], errors="coerce").fillna(0.0)
+
+    # Identify bye teams (POC assumption: Seed == 1)
+    team["Seed"] = pd.to_numeric(team.get("Seed"), errors="coerce")
+    is_bye = team["Seed"].eq(1)
+
+    # Expected games per your formula
+    team["Expected Games"] = (
+        1 + team["Win WC"] + team["Win Div"] + team["Win Conf"]
+    ).round(2)
+
+    # Non-bye: can play 1–4 games
+    play1_nonbye = 1 - team["Win WC"]
+    play2_nonbye = team["Win WC"] - team["Win Div"]
+    play3_nonbye = team["Win Div"] - team["Win Conf"]
+    play4_nonbye = team["Win Conf"]
+    play3plus_nonbye = team["Win Div"]
+
+    # Bye: max 3 games (Div, Conf, SB). 4 games is impossible.
+    play1_bye = 1 - team["Win Div"]                 # lose Div (first game)
+    play2_bye = team["Win Div"] - team["Win Conf"]  # win Div, lose Conf
+    play3_bye = team["Win Conf"]                    # win Conf (reach SB)
+    play4_bye = 0.0
+    play3plus_bye = team["Win Conf"]
+
+    # Choose the correct distribution by bye status
+    team["Play 1"] = np.where(is_bye, play1_bye, play1_nonbye)
+    team["Play 2"] = np.where(is_bye, play2_bye, play2_nonbye)
+    team["Play 3"] = np.where(is_bye, play3_bye, play3_nonbye)
+    team["Play 4"] = np.where(is_bye, play4_bye, play4_nonbye)
+    team["Play 3+"] = np.where(is_bye, play3plus_bye, play3plus_nonbye)
+
+    # Format probabilities as whole percentages (no decimals)
+    prob_cols = ["Play 1", "Play 2", "Play 3", "Play 4", "Play 3+"]
+    for c in prob_cols:
+        team[c] = (team[c] * 100).round(0).astype(int).astype(str) + "%"
+
+    team_display = (
+        team[["team", "Expected Games"] + prob_cols]
+        .rename(columns={"team": "Team"})
+        .sort_values("Expected Games", ascending=False)
+    )
+
+# Format Expected Games to exactly 2 decimals (display only)
+    team_display["Expected Games"] = team_display["Expected Games"].map(lambda x: f"{x:.2f}")
+
+    # Dynamic height to avoid scrolling
+    n_rows = len(team_display)
+    row_height = 35   # adjust if needed (32–40 typical)
+    header_height = 38
+    table_height = header_height + row_height * n_rows  # small padding
+
+    st.dataframe(
+        team_display,
+        width="stretch",
+        height=table_height,
+        hide_index=True,
+    )
 
 
-    odds_team_count = odds_c["team"].nunique()
-    merged_team_count = merged["team"].nunique()
 
-    st.write(f"Odds teams: {odds_team_count}")
-    st.write(f"Merged teams: {merged_team_count}")
-    st.write(f"Rows after join: {len(merged)} (expected ≈ odds teams × 6 units)")
-
-    # Identify any odds teams missing from pts
-    missing_pts_teams = sorted(set(odds_c["team"]) - set(pts_c["team"]))
-    if missing_pts_teams:
-        st.warning("Some playoff-odds teams were not found in pts data:")
-        st.write(missing_pts_teams)
-    else:
-        st.success("All playoff-odds teams found in pts data.")
-
-    st.subheader("Joined preview")
-    st.write(merged.head(25))
 
