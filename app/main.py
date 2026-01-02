@@ -15,6 +15,7 @@ from .metrics import (
     add_value_vs_unit_avg,
 )
 from .charts import unit_bar_chart
+import pandas as pd
 
 
 
@@ -103,9 +104,71 @@ def run_app():
     metric = metric_label_map[metric_label]
 
     chart_df = m[m["unit"] == selected_unit].copy()
-    fig = unit_bar_chart(chart_df, metric=metric)
-    st.plotly_chart(fig, use_container_width=True)
 
+    fig = unit_bar_chart(
+        chart_df,
+        metric=metric,
+        metric_label=metric_label,
+    )
+
+    st.plotly_chart(fig, width="stretch")
+
+    # ---------------------------
+    # Ranked table (overall)
+    # ---------------------------
+    st.subheader("Ranked table")
+
+    table = m.copy()
+
+    table["unit_label"] = table["team"].astype(str) + " " + table["unit"].astype(str)
+
+    # Overall rank across ALL units, based on Exp Pts vs Pos Avg
+    table["overall_rank"] = (
+        table["value_vs_unit_avg_expected_points"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    # Position rank within unit, based on Expected Points
+    table["position_rank"] = (
+        table.groupby("unit")["expected_points"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    # PPG rank within unit, based on reg_ppg
+    table["ppg_rank"] = (
+        table.groupby("unit")["reg_ppg"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    # Sort table by overall rank (best first)
+    table = table.sort_values(["overall_rank", "unit", "team"]).reset_index(drop=True)
+
+    # Final display with friendly column names
+    table_display = table[
+        [
+            "overall_rank",
+            "unit_label",                          # Team + Position (your “Unit”)
+            "value_vs_unit_avg_expected_points",   # Exp Pts vs Pos Avg
+            "expected_points",                     # Exp Pts
+            "position_rank",
+            "ppg_rank",
+            "reg_ppg",                             # PPG
+        ]
+    ].rename(columns={
+        "overall_rank": "Overall Rank",
+        "unit_label": "Unit",
+        "value_vs_unit_avg_expected_points": "Exp Pts vs Pos Avg",
+        "expected_points": "Exp Pts",
+        "position_rank": "Position Rank",
+        "ppg_rank": "PPG Rank",
+        "reg_ppg": "PPG",
+    })
+
+
+    st.dataframe(table_display, width="stretch")
 
 
     odds_team_count = odds_c["team"].nunique()
