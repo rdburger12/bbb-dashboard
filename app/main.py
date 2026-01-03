@@ -40,8 +40,30 @@ def run_app():
     pts_c = canonicalize_pts(pts_df)
     odds_c = canonicalize_odds(odds_df)
 
-    merged = join_pts_with_odds(pts_c, odds_c)
+    # ---------------------------
+    # Dashboard Layout (3 columns)
+    # ---------------------------
+    left, mid, right = st.columns([1.5, 1.8, 1.2], gap="small")
 
+    # ------------------------------------------
+    # Odds Source selector (RIGHT column, above table)
+    # ------------------------------------------
+    # We choose the source early so it drives join + metrics + both tables + chart.
+    with right:
+        odds_sources = sorted(odds_c["Odds Source"].dropna().unique().tolist())
+        if not odds_sources:
+            st.error("No 'Odds Source' values found in playoff_odds data.")
+            st.stop()
+
+        selected_source = st.selectbox("Odds Source", odds_sources, index=0)
+
+    # Filter odds to selected source (drives everything downstream)
+    odds_sel = odds_c[odds_c["Odds Source"] == selected_source].copy()
+
+    # Join using selected odds only (restricts teams to the 14 for that source)
+    merged = join_pts_with_odds(pts_c, odds_sel)
+
+    # Compute unit-level metrics based on selected odds
     m = add_expected_games(merged)
     m = add_expected_points(m, base_col="reg_ppg")
     m = add_unit_averages(m, value_col="expected_points")
@@ -49,14 +71,20 @@ def run_app():
 
     # --- Team colors (nflverse) ---
     team_meta = load_team_metadata()
-
-    # Assumes your `team` column matches nflverse `team_abbr`
     m = m.merge(
         team_meta,
         left_on="team",
         right_on="team_abbr",
         how="left",
     )
+
+    # ---------------------------
+    # Panel height (aligned across columns)
+    # ---------------------------
+    visible_rows = 14
+    row_height = 35
+    header_height = 38
+    panel_height = header_height + row_height * visible_rows
 
     # ---------------------------
     # Build Ranked Table (overall)
@@ -83,34 +111,12 @@ def run_app():
     )
 
     table = table.sort_values(["overall_rank", "unit", "team"]).reset_index(drop=True)
-
     rank_table = table.copy()  # keep raw columns for filtering
-
-
-    table_display = table[
-        [
-            "overall_rank",
-            "unit_label",
-            "value_vs_unit_avg_expected_points",
-            "expected_points",
-            "position_rank",
-            "ppg_rank",
-            "reg_ppg",
-        ]
-    ].rename(columns={
-        "overall_rank": "Overall Rank",
-        "unit_label": "Unit",
-        "value_vs_unit_avg_expected_points": "Exp Pts vs Pos Avg",
-        "expected_points": "Exp Pts",
-        "position_rank": "Position Rank",
-        "ppg_rank": "PPG Rank",
-        "reg_ppg": "PPG",
-    })
 
     # ------------------------------------------
     # Build Playoff Game Distribution (team-level)
     # ------------------------------------------
-    team = odds_c.copy()
+    team = odds_sel.copy()
 
     for c in ["Win WC", "Win Div", "Win Conf"]:
         team[c] = pd.to_numeric(team[c], errors="coerce").fillna(0.0)
@@ -152,24 +158,12 @@ def run_app():
         .rename(columns={"team": "Team"})
         .sort_values("Expected Games", ascending=False)
     )
-
-    # Display formatting
     team_display["Expected Games"] = team_display["Expected Games"].map(lambda x: f"{x:.2f}")
 
-    # Dynamic height to avoid scrolling; no padding (per your preference)
-    visible_rows = 14
-    row_height = 35
-    header_height = 38
-    panel_height = header_height + row_height * visible_rows
-
-
     # ---------------------------
-    # Dashboard Layout (3 columns)
+    # LEFT: Ranked table + filters
     # ---------------------------
-    left, mid, right = st.columns([1.5, 1.8, 1.2], gap="small")
-
     with left:
-        # --- Filters ---
         all_teams = sorted(rank_table["team"].dropna().unique().tolist())
         all_positions = ["QB", "RB", "WR", "TE", "K", "OTH"]
         present_positions = [p for p in all_positions if p in set(rank_table["unit"].unique())]
@@ -182,7 +176,6 @@ def run_app():
         with f_team:
             team_filter = st.multiselect("Team", options=all_teams, default=[])
 
-        # Apply filters (only if user selected something)
         filtered = rank_table.copy()
 
         if team_filter:
@@ -191,7 +184,6 @@ def run_app():
         if position_filter:
             filtered = filtered[filtered["unit"].isin(position_filter)]
 
-        # Build the display table from filtered data
         filtered["unit_label"] = filtered["team"].astype(str) + " " + filtered["unit"].astype(str)
 
         table_display = filtered[
@@ -217,21 +209,20 @@ def run_app():
         st.dataframe(
             table_display,
             width="stretch",
-            height=panel_height,   # keep your existing aligned height
+            height=panel_height,
             hide_index=True,
         )
 
-
-
+    # ---------------------------
+    # MID: Chart
+    # ---------------------------
     with mid:
         unit_order = ["QB", "RB", "WR", "TE", "K", "OTH"]
         units = [u for u in unit_order if u in set(m["unit"].unique())]
-        # Controls side by side
-        c_pos, c_metric = st.columns([1, 1])
 
+        c_pos, c_metric = st.columns([1, 1])
         with c_pos:
             selected_unit = st.selectbox("Position", units)
-
         with c_metric:
             metric_label_map = {
                 "Expected Playoff Points": "expected_points",
@@ -246,10 +237,13 @@ def run_app():
             chart_df,
             metric=metric,
             metric_label=metric_label,
-            height=panel_height
+            height=panel_height,
         )
         st.plotly_chart(fig, width="stretch")
 
+    # ---------------------------
+    # RIGHT: Odds Source selector already shown + table
+    # ---------------------------
     with right:
         st.dataframe(
             team_display,
@@ -257,4 +251,3 @@ def run_app():
             height=panel_height,
             hide_index=True,
         )
-
