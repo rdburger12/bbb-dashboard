@@ -8,6 +8,7 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
     # Defensive defaults in case any team colors are missing
     plot_df["team_color"] = plot_df["team_color"].fillna("#888888")
     plot_df["team_color2"] = plot_df["team_color2"].fillna("#222222")
+   #plot_df["unit"] 
 
     avg_value = plot_df[metric].mean()
 

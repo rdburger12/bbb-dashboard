@@ -32,12 +32,12 @@ def add_expected_points(df: pd.DataFrame, base_col: str = "reg_ppg") -> pd.DataF
     return out
 
 
-def add_unit_averages(df: pd.DataFrame, value_col: str = "expected_points") -> pd.DataFrame:
+def add_position_averages(df: pd.DataFrame, value_col: str = "expected_points") -> pd.DataFrame:
     """
     Adds position-group average for the chosen value column.
-    Produces: unit_avg_<value_col>
+    Produces: position_avg_<value_col>
 
-    NOTE: "unit_avg_*" is a legacy name; it is actually per-position.
+    NOTE: "position_avg_*" is a legacy name; it is actually per-position.
     """
     if value_col not in df.columns:
         raise KeyError(f"Missing value column: {value_col}")
@@ -45,33 +45,33 @@ def add_unit_averages(df: pd.DataFrame, value_col: str = "expected_points") -> p
         raise KeyError("Missing grouping column: position")
 
     out = df.copy()
-    avg_col = f"unit_avg_{value_col}"
+    avg_col = f"position_avg_{value_col}"
     out[avg_col] = out.groupby("position")[value_col].transform("mean")
     return out
 
 
-def add_value_vs_unit_avg(df: pd.DataFrame, value_col: str = "expected_points") -> pd.DataFrame:
+def add_value_vs_position_avg(df: pd.DataFrame, value_col: str = "expected_points") -> pd.DataFrame:
     """
     Adds value vs position-group average:
-      value_vs_unit_avg_<value_col> = value_col - unit_avg_<value_col>
+      value_vs_position_avg_<value_col> = value_col - position_avg_<value_col>
     """
-    avg_col = f"unit_avg_{value_col}"
+    avg_col = f"position_avg_{value_col}"
     if value_col not in df.columns:
         raise KeyError(f"Missing value column: {value_col}")
     if avg_col not in df.columns:
-        raise KeyError(f"{avg_col} not found. Call add_unit_averages() first.")
+        raise KeyError(f"{avg_col} not found. Call add_position_averages() first.")
 
     out = df.copy()
-    out[f"value_vs_unit_avg_{value_col}"] = out[value_col] - out[avg_col]
+    out[f"value_vs_position_avg_{value_col}"] = out[value_col] - out[avg_col]
     return out
 
 
-def add_unit_mins(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+def add_position_mins(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
     """
     Adds position-group minimum for the chosen value column.
-    Produces: unit_min_<value_col>
+    Produces: position_min_<value_col>
 
-    NOTE: "unit_min_*" is a legacy name; it is actually per-position.
+    NOTE: "position_min_*" is a legacy name; it is actually per-position.
     """
     if value_col not in df.columns:
         raise KeyError(f"Missing value column: {value_col}")
@@ -79,24 +79,24 @@ def add_unit_mins(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
         raise KeyError("Missing grouping column: position")
 
     out = df.copy()
-    min_col = f"unit_min_{value_col}"
+    min_col = f"position_min_{value_col}"
     out[min_col] = out.groupby("position")[value_col].transform("min")
     return out
 
 
-def add_value_vs_unit_min(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+def add_value_vs_position_min(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
     """
     Adds value vs position-group minimum:
-      value_vs_unit_min_<value_col> = value_col - unit_min_<value_col>
+      value_vs_position_min_<value_col> = value_col - position_min_<value_col>
     """
     out = df.copy()
-    min_col = f"unit_min_{value_col}"
-    delta_col = f"value_vs_unit_min_{value_col}"
+    min_col = f"position_min_{value_col}"
+    delta_col = f"value_vs_position_min_{value_col}"
 
     if value_col not in out.columns:
         raise KeyError(f"Missing value column: {value_col}")
     if min_col not in out.columns:
-        raise ValueError(f"Missing required column: {min_col}. Run add_unit_mins first.")
+        raise ValueError(f"Missing required column: {min_col}. Run add_position_mins first.")
 
     out[delta_col] = out[value_col] - out[min_col]
     return out

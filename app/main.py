@@ -14,10 +14,10 @@ from .data_loader import (
 from .metrics import (
     add_expected_games,
     add_expected_points,
-    add_unit_averages,
-    add_value_vs_unit_avg,
-    add_unit_mins,
-    add_value_vs_unit_min,
+    add_position_averages,
+    add_value_vs_position_avg,
+    add_position_mins,
+    add_value_vs_position_min,
 )
 from .charts import unit_bar_chart
 from .team_metadata import load_team_metadata
@@ -63,10 +63,10 @@ def run_app():
     m = add_expected_points(m, base_col="reg_ppg")
 
     # IMPORTANT: these functions must group by POSITION (see metrics.py note below)
-    m = add_unit_averages(m, value_col="expected_points")
-    m = add_value_vs_unit_avg(m, value_col="expected_points")
-    m = add_unit_mins(m, value_col="expected_points")
-    m = add_value_vs_unit_min(m, value_col="expected_points")
+    m = add_position_averages(m, value_col="expected_points")
+    m = add_value_vs_position_avg(m, value_col="expected_points")
+    m = add_position_mins(m, value_col="expected_points")
+    m = add_value_vs_position_min(m, value_col="expected_points")
 
     # Team colors (nflverse)
     team_meta = load_team_metadata()
@@ -87,7 +87,7 @@ def run_app():
     table["unit_label"] = table["team"].astype(str) + " " + table["position"].astype(str)
 
     table["overall_rank"] = (
-        table["value_vs_unit_avg_expected_points"]
+        table["value_vs_position_avg_expected_points"]
         .rank(method="min", ascending=False)
         .astype(int)
     )
@@ -178,9 +178,9 @@ def run_app():
         filtered = rank_table.copy()
 
         value_col = (
-            "value_vs_unit_avg_expected_points"
+            "value_vs_position_avg_expected_points"
             if baseline == "avg"
-            else "value_vs_unit_min_expected_points"
+            else "value_vs_position_min_expected_points"
         )
 
         if team_filter:
