@@ -47,11 +47,10 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
     )
 
     fig.update_layout(
-        title=f"Teams ranked by {metric_label}",
         xaxis_title="Team",
         yaxis_title=metric_label,
         height=650,
-        margin=dict(l=10, r=10, t=60, b=80),
+        margin=dict(l=10, r=10, t=0, b=80),
         xaxis_tickangle=-45,
         showlegend=False,
     )

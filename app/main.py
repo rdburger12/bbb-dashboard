@@ -1,4 +1,7 @@
 import streamlit as st
+import pandas as pd
+import numpy as np
+
 from .data_loader import (
     load_raw_data,
     validate_schema,
@@ -16,9 +19,6 @@ from .metrics import (
 )
 from .charts import unit_bar_chart
 from .team_metadata import load_team_metadata
-import pandas as pd
-import numpy as np
-
 
 
 def run_app():
@@ -27,7 +27,6 @@ def run_app():
     # --- Load + prepare data (no display) ---
     pts_df, odds_df = load_raw_data()
 
-    # Optional: keep validation but do not display unless failing
     pts_missing = validate_schema(pts_df, REQUIRED_PTS_COLS)
     odds_missing = validate_schema(odds_df, REQUIRED_ODDS_COLS)
     if pts_missing or odds_missing:
@@ -48,10 +47,9 @@ def run_app():
     m = add_unit_averages(m, value_col="expected_points")
     m = add_value_vs_unit_avg(m, value_col="expected_points")
 
-        # --- Team colors (nflverse) ---
+    # --- Team colors (nflverse) ---
     team_meta = load_team_metadata()
 
-    # IMPORTANT: adjust join key if needed
     # Assumes your `team` column matches nflverse `team_abbr`
     m = m.merge(
         team_meta,
@@ -60,37 +58,9 @@ def run_app():
         how="left",
     )
 
-
-    # --- Chart controls + chart ---
-    st.subheader("Team ranking within a position group")
-
-    unit_order = ["QB", "RB", "WR", "TE", "K", "OTH"]
-
-    # keep only units that actually exist in the data (defensive)
-    units = [u for u in unit_order if u in set(m["unit"].unique())]
-
-    selected_unit = st.selectbox("Position", units)
-
-
-    metric_label_map = {
-        "Expected points": "expected_points",
-        "PPG": "reg_ppg",
-    }
-    metric_label = st.selectbox("Metric", list(metric_label_map.keys()), index=0)
-    metric = metric_label_map[metric_label]
-
-    chart_df = m[m["unit"] == selected_unit].copy()
-
-    fig = unit_bar_chart(
-        chart_df,
-        metric=metric,
-        metric_label=metric_label,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    # --- Ranked table (overall) ---
-    st.subheader("Ranked table")
-
+    # ---------------------------
+    # Build Ranked Table (overall)
+    # ---------------------------
     table = m.copy()
     table["unit_label"] = table["team"].astype(str) + " " + table["unit"].astype(str)
 
@@ -134,25 +104,18 @@ def run_app():
         "reg_ppg": "PPG",
     })
 
-    st.dataframe(table_display, width="stretch", hide_index=True)
-
-
-    # ---------------------------
-    # Playoff game distribution (team-level)
-    # ---------------------------
-    st.subheader("Playoff game distribution (team-level)")
-
+    # ------------------------------------------
+    # Build Playoff Game Distribution (team-level)
+    # ------------------------------------------
     team = odds_c.copy()
 
-    # Coerce probabilities to floats; treat missing as 0 for POC
     for c in ["Win WC", "Win Div", "Win Conf"]:
         team[c] = pd.to_numeric(team[c], errors="coerce").fillna(0.0)
 
-    # Identify bye teams (POC assumption: Seed == 1)
+    # POC bye handling: Seed == 1
     team["Seed"] = pd.to_numeric(team.get("Seed"), errors="coerce")
     is_bye = team["Seed"].eq(1)
 
-    # Expected games per your formula
     team["Expected Games"] = (
         1 + team["Win WC"] + team["Win Div"] + team["Win Conf"]
     ).round(2)
@@ -164,21 +127,19 @@ def run_app():
     play4_nonbye = team["Win Conf"]
     play3plus_nonbye = team["Win Div"]
 
-    # Bye: max 3 games (Div, Conf, SB). 4 games is impossible.
-    play1_bye = 1 - team["Win Div"]                 # lose Div (first game)
-    play2_bye = team["Win Div"] - team["Win Conf"]  # win Div, lose Conf
-    play3_bye = team["Win Conf"]                    # win Conf (reach SB)
+    # Bye: max 3 games
+    play1_bye = 1 - team["Win Div"]
+    play2_bye = team["Win Div"] - team["Win Conf"]
+    play3_bye = team["Win Conf"]
     play4_bye = 0.0
     play3plus_bye = team["Win Conf"]
 
-    # Choose the correct distribution by bye status
     team["Play 1"] = np.where(is_bye, play1_bye, play1_nonbye)
     team["Play 2"] = np.where(is_bye, play2_bye, play2_nonbye)
     team["Play 3"] = np.where(is_bye, play3_bye, play3_nonbye)
     team["Play 4"] = np.where(is_bye, play4_bye, play4_nonbye)
     team["Play 3+"] = np.where(is_bye, play3plus_bye, play3plus_nonbye)
 
-    # Format probabilities as whole percentages (no decimals)
     prob_cols = ["Play 1", "Play 2", "Play 3", "Play 4", "Play 3+"]
     for c in prob_cols:
         team[c] = (team[c] * 100).round(0).astype(int).astype(str) + "%"
@@ -189,22 +150,59 @@ def run_app():
         .sort_values("Expected Games", ascending=False)
     )
 
-# Format Expected Games to exactly 2 decimals (display only)
+    # Display formatting
     team_display["Expected Games"] = team_display["Expected Games"].map(lambda x: f"{x:.2f}")
 
-    # Dynamic height to avoid scrolling
+    # Dynamic height to avoid scrolling; no padding (per your preference)
     n_rows = len(team_display)
-    row_height = 35   # adjust if needed (32–40 typical)
+    row_height = 35
     header_height = 38
-    table_height = header_height + row_height * n_rows  # small padding
+    table_height = header_height + row_height * n_rows
 
-    st.dataframe(
-        team_display,
-        width="stretch",
-        height=table_height,
-        hide_index=True,
-    )
+    # ---------------------------
+    # Dashboard Layout (3 columns)
+    # ---------------------------
+    st.subheader("Dashboard")
 
+    left, mid, right = st.columns([1.5, 1.8, 1.2], gap="small")
 
+    with left:
+        st.markdown("### Ranked table")
+        st.dataframe(table_display, width="stretch", hide_index=True)
 
+    with mid:
+        st.markdown("### Team ranking within a position group")
 
+        unit_order = ["QB", "RB", "WR", "TE", "K", "OTH"]
+        units = [u for u in unit_order if u in set(m["unit"].unique())]
+        # Controls side by side
+        c_pos, c_metric = st.columns([1, 1])
+
+        with c_pos:
+            selected_unit = st.selectbox("Position", units)
+
+        with c_metric:
+            metric_label_map = {
+                "Expected points": "expected_points",
+                "PPG": "reg_ppg",
+            }
+            metric_label = st.selectbox("Metric", list(metric_label_map.keys()), index=0)
+            metric = metric_label_map[metric_label]
+
+        chart_df = m[m["unit"] == selected_unit].copy()
+
+        fig = unit_bar_chart(
+            chart_df,
+            metric=metric,
+            metric_label=metric_label,
+        )
+        st.plotly_chart(fig, width="stretch")
+
+    with right:
+        st.markdown("### Playoff game distribution")
+        st.dataframe(
+            team_display,
+            width="stretch",
+            height=table_height,
+            hide_index=True,
+        )
