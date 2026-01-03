@@ -16,6 +16,8 @@ from .metrics import (
     add_expected_points,
     add_unit_averages,
     add_value_vs_unit_avg,
+    add_unit_mins,
+    add_value_vs_unit_min,
 )
 from .charts import unit_bar_chart
 from .team_metadata import load_team_metadata
@@ -68,6 +70,8 @@ def run_app():
     m = add_expected_points(m, base_col="reg_ppg")
     m = add_unit_averages(m, value_col="expected_points")
     m = add_value_vs_unit_avg(m, value_col="expected_points")
+    m = add_unit_mins(m, value_col="expected_points")
+    m = add_value_vs_unit_min(m, value_col="expected_points")
 
     # --- Team colors (nflverse) ---
     team_meta = load_team_metadata()
@@ -168,7 +172,15 @@ def run_app():
         all_positions = ["QB", "RB", "WR", "TE", "K", "OTH"]
         present_positions = [p for p in all_positions if p in set(rank_table["unit"].unique())]
 
-        f_pos, f_team = st.columns([1, 1])
+        f_pos, f_team, f_base = st.columns([1, 1, 2])
+
+        with f_base:
+            baseline_label_map = {
+                "Average": "avg",
+                "Minimum": "min",
+            }
+            baseline_label = st.selectbox("Compare Exp Pts vs Position:", list(baseline_label_map.keys()), index=0)
+            baseline = baseline_label_map[baseline_label]
 
         with f_pos:
             position_filter = st.multiselect("Position", options=present_positions, default=[])
@@ -178,6 +190,13 @@ def run_app():
 
         filtered = rank_table.copy()
 
+        value_col = (
+        "value_vs_unit_avg_expected_points"
+        if baseline == "avg"
+        else "value_vs_unit_min_expected_points"
+        )
+
+
         if team_filter:
             filtered = filtered[filtered["team"].isin(team_filter)]
 
@@ -186,25 +205,39 @@ def run_app():
 
         filtered["unit_label"] = filtered["team"].astype(str) + " " + filtered["unit"].astype(str)
 
+        # Recompute overall rank based on chosen baseline (rank should reflect what user is comparing against)
+        filtered = filtered.copy()
+        filtered["overall_rank"] = (
+            filtered[value_col]
+            .rank(method="min", ascending=False)
+            .astype(int)
+        )
+        filtered = filtered.sort_values(["overall_rank", "unit", "team"]).reset_index(drop=True)
+
+
+        value_label = "Exp Pts vs Pos Avg" if baseline == "avg" else "Exp Pts vs Pos Min"
+
         table_display = filtered[
             [
                 "overall_rank",
                 "unit_label",
-                "value_vs_unit_avg_expected_points",
-                "expected_points",
                 "position_rank",
-                "ppg_rank",
                 "reg_ppg",
+                "ppg_rank",
+                "expected_points",
+                value_col,
             ]
         ].rename(columns={
             "overall_rank": "Overall Rank",
             "unit_label": "Unit",
-            "value_vs_unit_avg_expected_points": "Exp Pts vs Pos Avg",
-            "expected_points": "Exp Pts",
             "position_rank": "Position Rank",
-            "ppg_rank": "PPG Rank",
             "reg_ppg": "PPG",
+            "ppg_rank": "PPG Rank",
+            "expected_points": "Exp Pts",
+            value_col: value_label,
         })
+
+
 
         st.dataframe(
             table_display,

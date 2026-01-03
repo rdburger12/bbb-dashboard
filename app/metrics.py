@@ -61,3 +61,30 @@ def add_value_vs_unit_avg(df: pd.DataFrame, value_col: str = "expected_points") 
     out = df.copy()
     out[f"value_vs_unit_avg_{value_col}"] = out[value_col] - out[avg_col]
     return out
+
+def add_unit_mins(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+    """
+    Adds unit_min_<value_col> based on the minimum value within each unit.
+    Example: unit_min_expected_points
+    """
+    out = df.copy()
+    min_col = f"unit_min_{value_col}"
+    out[min_col] = out.groupby("unit")[value_col].transform("min")
+    return out
+
+
+def add_value_vs_unit_min(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+    """
+    Adds value_vs_unit_min_<value_col> = <value_col> - unit_min_<value_col>
+    Example: value_vs_unit_min_expected_points
+    """
+    out = df.copy()
+    min_col = f"unit_min_{value_col}"
+    delta_col = f"value_vs_unit_min_{value_col}"
+
+    if min_col not in out.columns:
+        raise ValueError(f"Missing required column: {min_col}. Run add_unit_mins first.")
+
+    out[delta_col] = out[value_col] - out[min_col]
+    return out
+
