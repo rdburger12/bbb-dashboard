@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
-def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
+def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int):
     plot_df = df.sort_values(metric, ascending=False).copy()
 
     # Defensive defaults in case any team colors are missing
@@ -16,6 +16,9 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
             go.Bar(
                 x=plot_df["team"],
                 y=plot_df[metric],
+                text=plot_df[metric].round(2),
+                textposition="outside",
+                textfont=dict(size=12),
                 marker=dict(
                     color=plot_df["team_color"].tolist(),
                     line=dict(
@@ -32,6 +35,7 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
                 ),
                 customdata=plot_df[["reg_ppg", "expected_games", "expected_points"]].values,
             )
+
         ]
     )
 
@@ -48,9 +52,8 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str):
 
     fig.update_layout(
         xaxis_title="Team",
-        yaxis_title=metric_label,
-        height=650,
-        margin=dict(l=10, r=10, t=0, b=80),
+        height=height,
+        margin=dict(l=10, r=10, t=20, b=60),
         xaxis_tickangle=-45,
         showlegend=False,
     )

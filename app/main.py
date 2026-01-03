@@ -22,7 +22,7 @@ from .team_metadata import load_team_metadata
 
 
 def run_app():
-    st.title("Fantasy Football Dashboard")
+    st.title("Big Burger Bet 2026")
 
     # --- Load + prepare data (no display) ---
     pts_df, odds_df = load_raw_data()
@@ -83,6 +83,9 @@ def run_app():
     )
 
     table = table.sort_values(["overall_rank", "unit", "team"]).reset_index(drop=True)
+
+    rank_table = table.copy()  # keep raw columns for filtering
+
 
     table_display = table[
         [
@@ -154,25 +157,73 @@ def run_app():
     team_display["Expected Games"] = team_display["Expected Games"].map(lambda x: f"{x:.2f}")
 
     # Dynamic height to avoid scrolling; no padding (per your preference)
-    n_rows = len(team_display)
+    visible_rows = 14
     row_height = 35
     header_height = 38
-    table_height = header_height + row_height * n_rows
+    panel_height = header_height + row_height * visible_rows
+
 
     # ---------------------------
     # Dashboard Layout (3 columns)
     # ---------------------------
-    st.subheader("Dashboard")
-
     left, mid, right = st.columns([1.5, 1.8, 1.2], gap="small")
 
     with left:
-        st.markdown("### Ranked table")
-        st.dataframe(table_display, width="stretch", hide_index=True)
+        # --- Filters ---
+        all_teams = sorted(rank_table["team"].dropna().unique().tolist())
+        all_positions = ["QB", "RB", "WR", "TE", "K", "OTH"]
+        present_positions = [p for p in all_positions if p in set(rank_table["unit"].unique())]
+
+        f_pos, f_team = st.columns([1, 1])
+
+        with f_pos:
+            position_filter = st.multiselect("Position", options=present_positions, default=[])
+
+        with f_team:
+            team_filter = st.multiselect("Team", options=all_teams, default=[])
+
+        # Apply filters (only if user selected something)
+        filtered = rank_table.copy()
+
+        if team_filter:
+            filtered = filtered[filtered["team"].isin(team_filter)]
+
+        if position_filter:
+            filtered = filtered[filtered["unit"].isin(position_filter)]
+
+        # Build the display table from filtered data
+        filtered["unit_label"] = filtered["team"].astype(str) + " " + filtered["unit"].astype(str)
+
+        table_display = filtered[
+            [
+                "overall_rank",
+                "unit_label",
+                "value_vs_unit_avg_expected_points",
+                "expected_points",
+                "position_rank",
+                "ppg_rank",
+                "reg_ppg",
+            ]
+        ].rename(columns={
+            "overall_rank": "Overall Rank",
+            "unit_label": "Unit",
+            "value_vs_unit_avg_expected_points": "Exp Pts vs Pos Avg",
+            "expected_points": "Exp Pts",
+            "position_rank": "Position Rank",
+            "ppg_rank": "PPG Rank",
+            "reg_ppg": "PPG",
+        })
+
+        st.dataframe(
+            table_display,
+            width="stretch",
+            height=panel_height,   # keep your existing aligned height
+            hide_index=True,
+        )
+
+
 
     with mid:
-        st.markdown("### Team ranking within a position group")
-
         unit_order = ["QB", "RB", "WR", "TE", "K", "OTH"]
         units = [u for u in unit_order if u in set(m["unit"].unique())]
         # Controls side by side
@@ -183,8 +234,8 @@ def run_app():
 
         with c_metric:
             metric_label_map = {
-                "Expected points": "expected_points",
-                "PPG": "reg_ppg",
+                "Expected Playoff Points": "expected_points",
+                "Regular Season PPG": "reg_ppg",
             }
             metric_label = st.selectbox("Metric", list(metric_label_map.keys()), index=0)
             metric = metric_label_map[metric_label]
@@ -195,14 +246,15 @@ def run_app():
             chart_df,
             metric=metric,
             metric_label=metric_label,
+            height=panel_height
         )
         st.plotly_chart(fig, width="stretch")
 
     with right:
-        st.markdown("### Playoff game distribution")
         st.dataframe(
             team_display,
             width="stretch",
-            height=table_height,
+            height=panel_height,
             hide_index=True,
         )
+
