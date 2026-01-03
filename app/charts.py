@@ -8,7 +8,8 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
     # Defensive defaults in case any team colors are missing
     plot_df["team_color"] = plot_df["team_color"].fillna("#888888")
     plot_df["team_color2"] = plot_df["team_color2"].fillna("#222222")
-   #plot_df["unit"] 
+    plot_df["unit"] = plot_df["team"] + " " + plot_df["position"]
+
 
     avg_value = plot_df[metric].mean()
 
@@ -28,13 +29,13 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
                     ),
                 ),
                 hovertemplate=(
-                    "<b>%{x}</b><br>"
+                    "<b>%{customdata[3]}</b><br>"
                     f"{metric_label}: %{{y}}<br>"
-                    "PPG: %{customdata[0]}<br>"
-                    "Exp Games: %{customdata[1]}<br>"
-                    "Exp Pts: %{customdata[2]}<extra></extra>"
+                    "PPG: %{customdata[0]:.2f}<br>"
+                    "Exp Games: %{customdata[1]:.2f}<br>"
+                    "Exp Pts: %{customdata[2]:.2f}<extra></extra>"
                 ),
-                customdata=plot_df[["reg_ppg", "expected_games", "expected_points"]].values,
+                customdata=plot_df[["reg_ppg", "expected_games", "expected_points", "unit"]].values,
             )
 
         ]
@@ -52,7 +53,6 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
     )
 
     fig.update_layout(
-        xaxis_title="Team",
         height=height,
         margin=dict(l=10, r=10, t=20, b=60),
         xaxis_tickangle=-45,
