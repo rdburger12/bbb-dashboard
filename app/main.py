@@ -68,6 +68,25 @@ def run_app():
     m = add_position_mins(m, value_col="expected_points")
     m = add_value_vs_position_min(m, value_col="expected_points")
 
+    # Ranks within position (global within the selected odds source)
+    m["ppg_rank"] = (
+        m.groupby("position")["reg_ppg"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    m["exp_games_rank"] = (
+        m.groupby("position")["expected_games"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    m["exp_pts_rank"] = (
+        m.groupby("position")["expected_points"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
     # Team colors (nflverse)
     team_meta = load_team_metadata()
     m = m.merge(team_meta, left_on="team", right_on="team_abbr", how="left")
@@ -183,16 +202,27 @@ def run_app():
             else "value_vs_position_min_expected_points"
         )
 
+        # Start from the full table (global ranks), then filter down
+        base = rank_table.copy()
+
+        # Global overall rank based on chosen baseline (do NOT change with filters)
+        base["overall_rank"] = (
+            base[value_col]
+            .rank(method="min", ascending=False)
+            .astype(int)
+        )
+
+        # Global sort order (do NOT change with filters)
+        base = base.sort_values(["overall_rank", "position", "team"]).reset_index(drop=True)
+
+        # Apply filters ONLY to rows (no rank recompute)
+        filtered = base.copy()
+
         if team_filter:
             filtered = filtered[filtered["team"].isin(team_filter)]
+
         if position_filter:
             filtered = filtered[filtered["position"].isin(position_filter)]
-
-        # Recompute overall rank based on chosen baseline, and sort accordingly
-        filtered["overall_rank"] = (
-            filtered[value_col].rank(method="min", ascending=False).astype(int)
-        )
-        filtered = filtered.sort_values(["overall_rank", "position", "team"]).reset_index(drop=True)
 
         value_label = "Exp Pts vs Pos Avg" if baseline == "avg" else "Exp Pts vs Pos Min"
 

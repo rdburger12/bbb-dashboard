@@ -8,8 +8,16 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
     # Defensive defaults in case any team colors are missing
     plot_df["team_color"] = plot_df["team_color"].fillna("#888888")
     plot_df["team_color2"] = plot_df["team_color2"].fillna("#222222")
-    plot_df["unit"] = plot_df["team"] + " " + plot_df["position"]
+    plot_df["unit_label"] = plot_df["team"] + " " + plot_df["position"]
 
+    customdata = plot_df[
+        [
+            "unit_label",
+            "reg_ppg", "ppg_rank",
+            "expected_games", "exp_games_rank",
+            "expected_points", "exp_pts_rank",
+        ]
+    ].to_numpy()
 
     avg_value = plot_df[metric].mean()
 
@@ -18,6 +26,7 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
             go.Bar(
                 x=plot_df["team"],
                 y=plot_df[metric],
+                customdata=customdata,
                 text=plot_df[metric].round(2),
                 textposition="outside",
                 textfont=dict(size=12),
@@ -28,14 +37,13 @@ def unit_bar_chart(df: pd.DataFrame, metric: str, metric_label: str, height: int
                         width=2,
                     ),
                 ),
-                hovertemplate=(
-                    "<b>%{customdata[3]}</b><br>"
-                    f"{metric_label}: %{{y}}<br>"
-                    "PPG: %{customdata[0]:.2f}<br>"
-                    "Exp Games: %{customdata[1]:.2f}<br>"
-                    "Exp Pts: %{customdata[2]:.2f}<extra></extra>"
-                ),
-                customdata=plot_df[["reg_ppg", "expected_games", "expected_points", "unit"]].values,
+                hovertemplate = (
+                    "<b>%{customdata[0]}</b><br>"
+                    "PPG: %{customdata[1]:.4f} (%{customdata[2]})<br>"
+                    "Exp Games: %{customdata[3]:.2f} (%{customdata[4]})<br>"
+                    "Exp Pts: %{customdata[5]:.2f} (%{customdata[6]})"
+                    "<extra></extra>"
+                )
             )
 
         ]
