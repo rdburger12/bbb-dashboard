@@ -80,17 +80,32 @@ def build_model(pts_df: pd.DataFrame, odds_df: pd.DataFrame, selected_source: st
     team["Seed"] = pd.to_numeric(team.get("Seed"), errors="coerce")
     is_bye = team["Seed"].eq(1)
 
-    team["Expected Games"] = (1 + team["Win WC"] + team["Win Div"] + team["Win Conf"]).round(2)
+    seed = (
+        team["Seed"]
+        .astype(str)
+        .str.strip()
+        .str.extract(r"(\d+)", expand=False)
+    )
+    seed_num = pd.to_numeric(seed, errors="coerce")
+    is_bye = seed_num.eq(1)
 
+    team["Expected Games"] = np.where(
+        is_bye,
+        (1 + team["Win Div"] + team["Win Conf"]),
+        (1 + team["Win WC"] + team["Win Div"] + team["Win Conf"]),
+    ).round(2)
+
+    # Non-bye: games played 1–4
     play1_nonbye = 1 - team["Win WC"]
     play2_nonbye = team["Win WC"] - team["Win Div"]
     play3_nonbye = team["Win Div"] - team["Win Conf"]
     play4_nonbye = team["Win Conf"]
     play3plus_nonbye = team["Win Div"]
 
-    play1_bye = 1 - team["Win Div"]
-    play2_bye = team["Win Div"] - team["Win Conf"]
-    play3_bye = team["Win Conf"]
+    # Bye: games played 1–3 (no 4-game path)
+    play1_bye = 1 - team["Win Div"]                 # lose first game (Div)
+    play2_bye = team["Win Div"] - team["Win Conf"]  # win Div, lose Conf
+    play3_bye = team["Win Conf"]                    # reach SB (3 games played)
     play4_bye = 0.0
     play3plus_bye = team["Win Conf"]
 
@@ -99,6 +114,7 @@ def build_model(pts_df: pd.DataFrame, odds_df: pd.DataFrame, selected_source: st
     team["Play 3"] = np.where(is_bye, play3_bye, play3_nonbye)
     team["Play 4"] = np.where(is_bye, play4_bye, play4_nonbye)
     team["Play 3+"] = np.where(is_bye, play3plus_bye, play3plus_nonbye)
+
 
     prob_cols = ["Play 1", "Play 2", "Play 3", "Play 4", "Play 3+"]
     for c in prob_cols:

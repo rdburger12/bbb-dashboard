@@ -1,19 +1,37 @@
 import pandas as pd
+import numpy as np
 
 ODDS_COLS = ["Win WC", "Win Div", "Win Conf"]
 
 
 def add_expected_games(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Expected Games = 1 + Win WC + Win Div + Win Conf
-    Assumes Win WC / Win Div / Win Conf are probabilities in [0, 1].
+    Expected Games:
+      - Non-bye: 1 (WC) + P(win WC) + P(win Div) + P(win Conf)
+      - Bye (Seed == 1): 1 (Div) + P(win Div) + P(win Conf)
+
+    This remains correct even if bye teams have Win WC = 1 in the data.
     """
     out = df.copy()
     for c in ODDS_COLS:
         if c not in out.columns:
             raise KeyError(f"Missing required odds column: {c}")
 
-    out["expected_games"] = 1 + out["Win WC"] + out["Win Div"] + out["Win Conf"]
+    if "Seed" in out.columns:
+        seed = (
+            out["Seed"]
+            .astype(str)
+            .str.strip()
+            .str.extract(r"(\d+)", expand=False)  # pull the first integer-looking token
+        )
+        seed_num = pd.to_numeric(seed, errors="coerce")
+        is_bye = seed_num.eq(1)
+        win_wc_played = np.where(is_bye, 0.0, out["Win WC"])
+    else:
+        # If Seed isn't present, assume everyone plays WC
+        win_wc_played = out["Win WC"]
+
+    out["expected_games"] = 1 + win_wc_played + out["Win Div"] + out["Win Conf"]
     return out
 
 
