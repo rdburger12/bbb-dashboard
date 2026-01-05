@@ -52,7 +52,7 @@ def run_app():
             st.error("No 'Odds Source' values found in playoff_odds data.")
             st.stop()
 
-        default_index = odds_sources.index("Vegas") if "Vegas" in odds_sources else 0
+        default_index = odds_sources.index("Fanduel") if "Fanduel" in odds_sources else 0
 
         selected_source = st.selectbox(
             "Odds Source",
