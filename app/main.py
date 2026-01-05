@@ -51,7 +51,15 @@ def run_app():
         if not odds_sources:
             st.error("No 'Odds Source' values found in playoff_odds data.")
             st.stop()
-        selected_source = st.selectbox("Odds Source", odds_sources, index=0)
+
+        default_index = odds_sources.index("Vegas") if "Vegas" in odds_sources else 0
+
+        selected_source = st.selectbox(
+            "Odds Source",
+            odds_sources,
+            index=default_index,
+        )
+
 
     # ---------------------------
     # Build model (all derived tables + metrics)
